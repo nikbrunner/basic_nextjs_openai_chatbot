@@ -1,5 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Configuration, OpenAIApi } from "openai";
+import { useQuery } from "react-query";
+import { initialSystemMessage, initialUserMessage } from "@/prompts/initial";
+
+// TODO: track recommended category (prop in Response)
+// TODO: clean up
+// TODO: add loading indicator
+// TODO: add error handling
+// TODO: remove input
+// TODO: add action to navigate to client with recommended category
 
 const config = new Configuration({
   apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
@@ -7,68 +16,54 @@ const config = new Configuration({
 
 const openai = new OpenAIApi(config);
 
-interface Response {
+export interface Response {
   text: string;
   answers?: string[];
   progress: number;
 }
 
-interface Message {
+export interface Message {
   role: "user" | "assistant" | "system";
   content: string;
 }
 
-const initialMessage: Message = {
-  role: "user",
-  content: `You are now an advisor for Bike categories called BikeCenterGPT.
-        You will ask 3 questions in total to the user and then make a recommendation. 
-        For each response you create a valid JSON object with the following keys: "text", "answers", "progress".
-        Do not include any explanations, only provide a  RFC8259 compliant JSON response  following this format without deviation. Please escape all special characters in your response.
-        Never ask multiple questions at once. Always ask one question at a time and wait for an answer. Never ask the same question twice. Start by asking me the first question`.trim(),
+const getAssistantResponse = async (messages: Message[]) => {
+  const response = await openai.createChatCompletion({
+    model: "gpt-4",
+    messages: messages,
+    max_tokens: 500,
+    temperature: 0,
+  });
+
+  return response.data.choices[0].message?.content.trim() || "";
 };
 
 const App: React.FC = () => {
-  const [input, setInput] = useState<string>("");
-  const [messages, setMessages] = useState<Message[]>([initialMessage]);
-  console.log("Test: index.tsx [[messages]]", messages);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [messages, setMessages] = useState<Message[]>([
+    initialSystemMessage,
+    initialUserMessage,
+  ]);
 
-  useEffect(() => {
-    if (messages.length > 0 && messages[messages.length - 1].role === "user") {
-      getAssistantResponse();
+  const shouldFetch =
+    messages.length >= 2 && messages[messages.length - 1].role === "user";
+
+  const { isLoading, isFetching, isError, error } = useQuery(
+    "getAssistantResponse",
+    () => getAssistantResponse(messages),
+    {
+      enabled: shouldFetch,
+      onSuccess: (data) => data && addMessage("assistant", data),
     }
-  }, [messages]);
-
-  const getAssistantResponse = async () => {
-    const response = await openai.createChatCompletion({
-      model: "gpt-3.5-turbo",
-      messages: messages,
-      max_tokens: 500,
-      temperature: 0,
-    });
-
-    const aiResponse = response.data.choices[0].message?.content.trim() || "";
-
-    addMessage("assistant", aiResponse);
-  };
+  );
 
   const addMessage = (role: "user" | "assistant", content: string) => {
     setMessages((prevMessages) => [...prevMessages, { role, content }]);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (input.trim()) {
-      addMessage("user", input);
-      setInput("");
-      inputRef.current?.focus();
-    }
-  };
-
   const renderUserMessage = (message: Message) => {
     return (
       <div className="flex justify-end">
-        <div className="bg-green-300 text-black p-4 rounded-md">
+        <div className="bg-blue-300 text-black px-2 py-1 rounded-md">
           <p>{String(message.content)}</p>
         </div>
       </div>
@@ -77,19 +72,22 @@ const App: React.FC = () => {
 
   const renderAssistantMessage = (message: Message) => {
     const response = JSON.parse(message.content) as Response;
-    const answers = response?.answers;
-    const question = response.text;
 
     return (
       <div className="flex justify-start">
-        <div className="bg-green-300 p-4 rounded-md">
-          <p className="text-black">{question}</p>
-          <div className="flex gap-2 flex-col p-4">
-            {answers?.map((answer) => {
+        <div className="bg-green-300 text-black p-4 rounded-md">
+          {response.progress > 0 && (
+            <p className="bg-gray-800 text-white mb-3 px-2 py-0 rounded-full inline-block">
+              {response.progress}
+            </p>
+          )}
+          <p className="mb-3 text-black">{response.text}</p>
+          <div className="flex gap-2 flex-row">
+            {response.answers?.map((answer) => {
               return (
                 <button
                   key={answer}
-                  className="bg-green-500 p-2 rounded-md"
+                  className="bg-green-500 px-2 py-1 rounded-md hover:bg-green-600 transition"
                   onClick={() => addMessage("user", answer)}
                 >
                   {answer}
@@ -103,38 +101,29 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex justify-center items-center flex-col p-20">
-      <form className="mb-10 fixed top-20 bg-black " onSubmit={handleSubmit}>
-        <input
-          type="text"
-          className="text-black mr-3 p-2 rounded-md"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          ref={inputRef}
-        />
-        <button
-          className="bg-green-500 border-2 border-green-300 rounded-md p-2"
-          type="submit"
-        >
-          Send
-        </button>
-      </form>
+    <div className="relative max-w-4xl mx-auto flex justify-center items-center flex-col p-20">
+      {isError && (
+        <div className="bg-red-500 text-white p-4 rounded-md mb-4">
+          <p>{JSON.stringify(error)}</p>
+        </div>
+      )}
       <div>
-        {messages
-          // filter out the first message
-          .filter((_, index) => index !== 0)
-          .map((message, index) => {
+        {messages.map((message, index) => {
+          if (index >= 2) {
             return (
-              <div
-                key={index}
-                className="mb-2 p-4 border-2 rounded-md border-green-300 "
-              >
-                {message.role === "user"
-                  ? renderUserMessage(message)
-                  : renderAssistantMessage(message)}
+              <div key={index} className="mb-2 p-4">
+                {message.role === "user" && renderUserMessage(message)}
+                {message.role === "assistant" &&
+                  renderAssistantMessage(message)}
               </div>
             );
-          })}
+          }
+        })}
+        {(isLoading || isFetching) && (
+          <p className="fixed top-3 left-3 bg-gray-900 text-sky-50 rounded-md p-2">
+            Loading...
+          </p>
+        )}
       </div>
     </div>
   );
