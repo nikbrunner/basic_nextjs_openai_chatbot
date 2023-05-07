@@ -63,7 +63,7 @@ const App: React.FC = () => {
   const renderUserMessage = (message: Message) => {
     return (
       <div className="flex justify-end">
-        <div className="bg-blue-300 text-black px-2 py-1 rounded-md">
+        <div className="bg-blue-300 text-black px-2 py-1 rounded-md shadow-black shadow-lg">
           <p>{String(message.content)}</p>
         </div>
       </div>
@@ -75,7 +75,7 @@ const App: React.FC = () => {
 
     return (
       <div className="flex justify-start">
-        <div className="bg-green-300 text-black p-4 rounded-md">
+        <div className="bg-green-300 text-black p-4 rounded-md shadow-black shadow-lg">
           {response.progress > 0 && (
             <p className="bg-gray-800 text-white mb-3 px-2 py-0 rounded-full inline-block">
               {response.progress}
@@ -101,7 +101,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="relative max-w-4xl mx-auto flex justify-center items-center flex-col p-20">
+    <div className="bg-slate-800 relative max-w-4xl mx-auto flex justify-center items-center flex-col p-20">
       {isError && (
         <div className="bg-red-500 text-white p-4 rounded-md mb-4">
           <p>{JSON.stringify(error)}</p>
