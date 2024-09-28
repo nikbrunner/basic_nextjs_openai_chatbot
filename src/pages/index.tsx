@@ -1,46 +1,12 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Configuration, OpenAIApi } from "openai";
-import { useQuery } from "react-query";
+import React, { useState, } from "react";
 import { initialSystemMessage, initialUserMessage } from "@/prompts/initial";
+import useChat, { AssistantResponse } from "../queries/useChat";
 
-// TODO: track recommended category (prop in Response)
-// TODO: use structured output
-// TODO: Update deps
-// TODO: clean up
-// TODO: add loading indicator
-// TODO: add error handling
-// TODO: remove input
-// TODO: add action to navigate to client with recommended category
 
-const config = new Configuration({
-    apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
-});
-
-const openai = new OpenAIApi(config);
-
-export interface Response {
-    text: string;
-    answers?: string[];
-    progress: number;
-}
-
-export interface Message {
-    role: "user" | "assistant" | "system";
+export type Message = {
+    role: "user" | "system" | "assistant";
     content: string;
 }
-
-const getAssistantResponse = async (messages: Message[]) => {
-    const response = await openai.createChatCompletion({
-        model: "gpt-4",
-        messages: messages,
-        max_tokens: 500,
-        temperature: 0,
-    });
-
-    console.log("Test: index.tsx [[response]]", response);
-
-    return response.data.choices[0].message?.content.trim() || "";
-};
 
 const App: React.FC = () => {
     const [messages, setMessages] = useState<Message[]>([
@@ -48,17 +14,21 @@ const App: React.FC = () => {
         initialUserMessage,
     ]);
 
-    const shouldFetch =
-        messages.length >= 2 && messages[messages.length - 1].role === "user";
+    console.log("Test: index.tsx [[messages]]", messages);
 
-    const { isLoading, isFetching, isError, error } = useQuery(
-        "getAssistantResponse",
-        () => getAssistantResponse(messages),
+    const { isLoading, isFetching, isError, error } = useChat(
+        messages,
         {
-            enabled: shouldFetch,
-            onSuccess: (data) => data && addMessage("assistant", data),
+            enabled: messages.length >= 2 && messages[messages.length - 1].role === "user",
+            onSuccess: data => {
+                if (data) {
+                    console.log("Test: jooooo [[data]]", data);
+                    return addMessage("assistant", data as unknown as string);
+                }
+            },
         }
     );
+
 
     const addMessage = (role: "user" | "assistant", content: string) => {
         setMessages((prevMessages) => [...prevMessages, { role, content }]);
@@ -75,7 +45,7 @@ const App: React.FC = () => {
     };
 
     const renderAssistantMessage = (message: Message) => {
-        const response = JSON.parse(message.content) as Response;
+        const response = JSON.parse(message.content) as AssistantResponse;
 
         return (
             <div className="flex justify-start">
@@ -113,7 +83,6 @@ const App: React.FC = () => {
             )}
             <div>
                 {messages.map((message, index) => {
-                    const isLastIndex = index === (messages.length - 1);
                     if (index >= 2) {
                         return (
                             <div key={index} className="mb-2 p-4">
